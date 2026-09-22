@@ -8,7 +8,7 @@
 //
 // env (서버 전용 — NEXT_PUBLIC_ 접두사 절대 금지):
 //   - CRM_PRO_API_KEY    필수. 미설정 시 전송 스킵(no-op) + 경고 로그
-//   - CRM_PRO_GROUP_NO   참고값. 프로덕션은 116 으로 강제
+//   - CRM_PRO_GROUP_NO   기본 유입 참고값. GPT 유료 유입 외에는 116 유지
 //   - CRM_PRO_BASE_URL   선택. 기본 https://crmpro.kr/api
 //
 // 동작 원칙 :
@@ -19,6 +19,7 @@
 
 const DEFAULT_BASE_URL = 'https://crmpro.kr/api'
 const FINAL_CRM_PRO_GROUP_NO = 116 // 116.인바운드_우리편
+const CHATGPT_ADS_GROUP_NO = 196 // GPT광고_토스 유입 → 바인컴즈_토스 배정
 
 // 폼 product_category 슬러그 → CRM 표기용 한글 라벨
 const CATEGORY_LABELS: Record<string, string> = {
@@ -87,7 +88,7 @@ export function buildCrmProSubmitBody(p: CrmProLeadPayload): CrmProSubmitBody | 
   const utmCampaign = firstText(p.utmCampaign)
 
   return {
-    group_no: resolveCrmProGroupNo(),
+    group_no: resolveCrmProGroupNo(p),
     name: p.name,
     tel,
     // 업종은 recommend 폼만 수집 — 없으면 상품 카테고리로 대체 (엄군 정책 확정 전 임시)
@@ -162,7 +163,12 @@ export async function sendCrmProLead(p: CrmProLeadPayload): Promise<boolean> {
   }
 }
 
-function resolveCrmProGroupNo(): number {
+function resolveCrmProGroupNo(p: CrmProLeadPayload): number {
+  // GPT 자연 유입과 타 매체는 기존 그룹 유지. 클라이언트가 그룹 ID를 지정하지 못한다.
+  const source = firstText(p.utmSource)?.toLowerCase()
+  const medium = firstText(p.utmMedium)?.toLowerCase()
+  if (source === 'chatgpt' && medium === 'paid') return CHATGPT_ADS_GROUP_NO
+
   const configured = Number(process.env.CRM_PRO_GROUP_NO)
   if (configured !== FINAL_CRM_PRO_GROUP_NO) {
     console.warn('[CRMPro] CRM_PRO_GROUP_NO mismatch; forcing final group', {
